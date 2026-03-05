@@ -647,7 +647,7 @@ CRITICAL RULES:
 - Combine multiple mentions into single coherent summaries for textarea fields
 - For select fields, choose the closest matching option from: mobility (Unaided/Stick/Zimmer/Wheelchair/Bed bound), falls (Risk assessment undertaken/Risk assessment required), podiatry (Assessment undertaken/Assessment required), oral (Assessment undertaken/Assessment required), pressure (Y/N), diet (Normal/Soft/Supplements/PEG), hearing (Normal/Hearing aid/Other), eyesight (Normal/Glasses/Other), osteo (Y/N), med_review (Y/N), eol_discussed (Y/N), mmse_interp (24-30: No impairment/18-23: Mild impairment/0-17: Severe impairment), gds_interp (Not suggestive/Score >5 - investigate/Other)
 
-Return ONLY a valid JSON object, no markdown, no explanation, no preamble. Every key must be present. Use null only if truly not mentioned anywhere in the transcript.
+Return ONLY a raw JSON object. NO markdown fences, NO backticks, NO ```json, NO explanation, NO preamble. Start your response with { and end with }. Every key must be present. Use null only if truly not mentioned anywhere in the transcript.
 
 JSON structure:
 {
@@ -702,7 +702,13 @@ JSON structure:
     console.log('Raw response:', text.slice(0, 500));
 
     let parsed;
-    const clean = text.replace(/```json|```/g, '').trim();
+    // Strip markdown fences - handle all variations
+    let clean = text.trim();
+    if (clean.startsWith('```')) {
+      clean = clean.replace(/^```json\s*/i, '').replace(/^```\s*/i, '');
+      clean = clean.replace(/\s*```\s*$/, '');
+    }
+    clean = clean.trim();
     try {
       parsed = JSON.parse(clean);
     } catch(e) {
