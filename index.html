@@ -635,11 +635,21 @@ async function analyse() {
   badge.textContent = 'Processing'; badge.className = 'status-badge proc';
 
   const isAnnual = currentForm === 'annual';
-  const systemPrompt = `You are a clinical documentation assistant for UK care home resident reviews.
-Extract structured data from the consultation transcript and return ONLY valid JSON with no preamble or markdown.
-Use null for any field not mentioned.
+  const systemPrompt = `You are a clinical documentation assistant extracting data from a UK care home GP consultation transcript.
 
-Return exactly this JSON structure:
+CRITICAL RULES:
+- Extract EVERY piece of clinical information present, even if only briefly mentioned
+- Be liberal with extraction - if something is implied or mentioned in passing, still extract it
+- For fields like current_problems, sys_*, include ALL conditions/medications/findings mentioned
+- For mobility, falls, diet etc - if mentioned at all, fill in the most appropriate option
+- For action fields - infer sensible actions from the clinical context even if not explicitly stated
+- NEVER leave a field null if there is ANY relevant information in the transcript
+- Combine multiple mentions into single coherent summaries for textarea fields
+- For select fields, choose the closest matching option from: mobility (Unaided/Stick/Zimmer/Wheelchair/Bed bound), falls (Risk assessment undertaken/Risk assessment required), podiatry (Assessment undertaken/Assessment required), oral (Assessment undertaken/Assessment required), pressure (Y/N), diet (Normal/Soft/Supplements/PEG), hearing (Normal/Hearing aid/Other), eyesight (Normal/Glasses/Other), osteo (Y/N), med_review (Y/N), eol_discussed (Y/N), mmse_interp (24-30: No impairment/18-23: Mild impairment/0-17: Severe impairment), gds_interp (Not suggestive/Score >5 - investigate/Other)
+
+Return ONLY a valid JSON object, no markdown, no explanation, no preamble. Every key must be present. Use null only if truly not mentioned anywhere in the transcript.
+
+JSON structure:
 {
   "res_name":null,"res_dob":null,"care_home":null,"lead_gp":null,"date_assess":null,"assessor":null,
   ${isAnnual ? '"review_period":null,"changes_medical":null,"changes_function":null,"changes_cognitive":null,"hospital_admissions":null,' : ''}
@@ -655,7 +665,7 @@ Return exactly this JSON structure:
   "eyesight":null,"eyesight_action":null,"eye_specify":null,"eye_careplan":null,
   "osteo":null,"osteo_action":null,"osteo_falls":null,"osteo_cavitd":null,"osteo_bisphos":null,
   "investigations":null,"med_review":null,"recommended_actions":null,"eol_discussed":null,"further_actions":null
-}`;
+}`
 
   try {
     // Log key info to console for debugging
