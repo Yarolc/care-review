@@ -151,6 +151,7 @@ input, select, textarea, button { font-family: inherit; }
   <label for="apiKeyInput">Anthropic API Key</label>
   <input type="password" id="apiKeyInput" placeholder="sk-ant-..." autocomplete="off">
   <button onclick="saveApiKey()">Save</button>
+  <button onclick="testApiKey()" style="padding:6px 12px;background:transparent;border:1px solid #b8922a;border-radius:4px;color:#b8922a;font-size:0.78rem;font-weight:600;cursor:pointer;">Test Key</button>
   <span class="apikey-saved" id="apiKeySaved"> Key saved</span>
   <span style="font-size:0.7rem;color:#888;margin-left:8px">
     Get a key at <strong>console.anthropic.com</strong>  API Keys
@@ -563,6 +564,49 @@ function getApiKey() {
   return raw.replace(/[^ -~]/g, '').trim();
 }
 
+async function testApiKey() {
+  const key = getApiKey();
+  if (!key) { alert('No key saved yet. Paste your key and click Save first.'); return; }
+
+  // Check every character
+  let badChars = [];
+  for (let i = 0; i < key.length; i++) {
+    const code = key.charCodeAt(i);
+    if (code < 32 || code > 126) badChars.push('pos ' + i + ': code ' + code);
+  }
+  if (badChars.length) {
+    alert('Key contains invalid characters:\n' + badChars.join('\n') + '\n\nPlease re-paste your key.');
+    return;
+  }
+
+  alert('Key looks clean: ' + key.length + ' chars, starts with ' + key.slice(0, 10) + '\n\nTesting API call now...');
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 10,
+        messages: [{ role: 'user', content: 'Say OK' }],
+      }),
+    });
+    const data = await resp.json();
+    if (data.error) {
+      alert('API error: ' + data.error.type + ': ' + data.error.message);
+    } else {
+      alert('Success! API key is working correctly.');
+    }
+  } catch(e) {
+    alert('Fetch failed: ' + e.message + '\n\nThis is likely a CORS issue from the hosting environment, not the key itself.');
+  }
+}
+
 function loadApiKey() {
   try {
     const k = localStorage.getItem('chr_apikey');
@@ -622,6 +666,8 @@ Return exactly this JSON structure:
     if (!apiKey.startsWith('sk-')) {
       throw new Error('API key should start with sk- but got: ' + apiKey.slice(0,10));
     }
+    // PROXY_URL: if set, requests go through your Cloudflare Worker proxy
+    // which handles the API key server-side. Leave empty to call Anthropic directly.
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
