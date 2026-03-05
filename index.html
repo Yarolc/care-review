@@ -702,13 +702,11 @@ JSON structure:
     console.log('Raw response:', text.slice(0, 500));
 
     let parsed;
-    // Strip markdown fences - handle all variations
-    let clean = text.trim();
-    if (clean.startsWith('```')) {
-      clean = clean.replace(/^```json\s*/i, '').replace(/^```\s*/i, '');
-      clean = clean.replace(/\s*```\s*$/, '');
-    }
-    clean = clean.trim();
+    // Extract JSON by finding first { and last } - ignores any markdown wrapping
+    const firstBrace = text.indexOf('{');
+    const lastBrace = text.lastIndexOf('}');
+    if (firstBrace === -1 || lastBrace === -1) throw new Error('No JSON object found in response');
+    let clean = text.slice(firstBrace, lastBrace + 1);
     try {
       parsed = JSON.parse(clean);
     } catch(e) {
