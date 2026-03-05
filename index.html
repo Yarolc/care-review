@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Care Home Resident Review</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+/* -- Reset & Base -- */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --ink: #1c2b3a; --paper: #f7f4ef; --cream: #eee9df;
+  --teal: #2a6e6e; --teal-l: #3d9494; --teal-faint: rgba(42,110,110,0.08);
+  --rust: #b5472a; --gold: #b8922a; --line: rgba(28,43,58,0.13);
+}
+body { font-family: 'Segoe UI', system-ui, sans-serif; color: var(--ink); background: var(--paper); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+input, select, textarea, button { font-family: inherit; }
+
+/* -- Header -- */
+.header { background: var(--ink); color: var(--paper); padding: 10px 24px; display: flex; align-items: center; justify-content: space-between; border-bottom: 3px solid var(--teal); flex-shrink: 0; gap: 16px; }
+.header-title { font-size: 1.2rem; font-weight: 700; }
+.header-sub { font-size: 0.65rem; color: rgba(247,244,239,0.5); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 2px; }
+.header-right { display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
+
+/* -- Toggle -- */
+.toggle-wrap { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.08); border-radius: 40px; padding: 5px 14px; }
+.toggle-label { font-size: 0.76rem; font-weight: 500; color: rgba(247,244,239,0.4); transition: color .2s; }
+.toggle-label.active { color: var(--paper); }
+.toggle-track { width: 40px; height: 22px; background: var(--teal); border-radius: 11px; cursor: pointer; position: relative; flex-shrink: 0; }
+.toggle-thumb { position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: white; transition: left .25s; }
+.toggle-thumb.on { left: 21px; }
+
+/* -- API Key bar -- */
+.apikey-bar { display: flex; align-items: center; gap: 10px; padding: 8px 24px; background: var(--teal-faint); border-bottom: 1px solid var(--line); flex-shrink: 0; }
+.apikey-bar label { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--teal); white-space: nowrap; }
+.apikey-bar input { flex: 1; max-width: 340px; border: 1px solid var(--line); border-radius: 4px; padding: 6px 10px; font-size: 0.82rem; outline: none; }
+.apikey-bar input:focus { border-color: var(--teal-l); }
+.apikey-bar button { padding: 6px 14px; background: var(--teal); color: white; border: none; border-radius: 4px; font-size: 0.78rem; font-weight: 600; cursor: pointer; }
+.apikey-saved { font-size: 0.72rem; color: var(--teal); display: none; }
+
+/* -- Body layout -- */
+.body { display: grid; grid-template-columns: 320px 1fr; flex: 1; min-height: 0; }
+
+/* -- Left panel -- */
+.panel-left { background: var(--cream); border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 18px; gap: 12px; overflow-y: auto; }
+.panel-section-title { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--teal); padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.info-box { background: var(--teal-faint); border: 1px solid rgba(42,110,110,0.2); border-radius: 5px; padding: 10px 12px; font-size: 0.76rem; color: var(--teal); line-height: 1.6; }
+.info-box.warn { background: rgba(181,71,42,0.07); border-color: rgba(181,71,42,0.25); color: #7a2a15; display: none; }
+
+/* -- Record button -- */
+.rec-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px 0; }
+.rec-btn { width: 62px; height: 62px; border-radius: 50%; border: 2.5px solid var(--rust); background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .2s; }
+.rec-btn.recording { background: var(--rust); box-shadow: 0 0 0 8px rgba(181,71,42,0.18); }
+.rec-dot { width: 22px; height: 22px; border-radius: 50%; background: var(--rust); transition: all .2s; }
+.rec-btn.recording .rec-dot { width: 18px; height: 18px; border-radius: 3px; background: white; }
+.rec-status { font-size: 0.78rem; font-weight: 500; color: var(--teal); text-align: center; }
+.rec-status.active { color: var(--rust); }
+.rec-timer { font-size: 1.5rem; font-weight: 300; letter-spacing: 0.1em; display: none; }
+.rec-timer.on { display: block; }
+
+/* -- Transcript -- */
+.tx-label { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; color: #888; }
+#transcript { flex: 1; min-height: 180px; background: white; border: 1px solid var(--line); border-radius: 5px; padding: 12px; font-size: 0.88rem; line-height: 1.7; color: var(--ink); resize: none; outline: none; width: 100%; }
+
+/* -- Buttons -- */
+.btn-row { display: flex; gap: 8px; }
+.btn { padding: 9px 14px; border-radius: 5px; font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: all .2s; flex: 1; border: none; }
+.btn-outline { background: transparent; border: 1.5px solid var(--teal); color: var(--teal); }
+.btn-primary { background: var(--teal); color: white; }
+.btn-primary:disabled { background: #aaa; cursor: not-allowed; }
+.btn-dark { background: var(--ink); color: var(--paper); }
+
+/* -- Right panel -- */
+.panel-right { display: flex; flex-direction: column; background: white; min-height: 0; }
+.status-bar { display: flex; align-items: center; justify-content: space-between; padding: 9px 22px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
+.form-label { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--teal); }
+.status-badge { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; padding: 3px 11px; border-radius: 20px; background: var(--cream); color: #999; }
+.status-badge.proc { background: rgba(184,146,42,0.15); color: var(--gold); }
+.status-badge.done { background: rgba(42,110,110,0.12); color: var(--teal); }
+.status-badge.err { background: rgba(181,71,42,0.1); color: var(--rust); }
+
+/* -- Section nav -- */
+.section-nav { display: flex; border-bottom: 1px solid var(--line); background: var(--paper); overflow-x: auto; flex-shrink: 0; scrollbar-width: none; }
+.section-nav::-webkit-scrollbar { display: none; }
+.nav-tab { padding: 9px 14px; font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; cursor: pointer; border-bottom: 2.5px solid transparent; color: #999; transition: all .2s; }
+.nav-tab.active { border-bottom-color: var(--teal); color: var(--teal); }
+
+/* -- Form area -- */
+.form-area { flex: 1; overflow-y: auto; padding: 22px; }
+.section-heading { font-family: Georgia, serif; font-size: 1.05rem; color: var(--ink); border-bottom: 2px solid var(--teal); padding-bottom: 7px; margin-bottom: 16px; }
+.fields-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.field-wrap { display: flex; flex-direction: column; gap: 4px; }
+.field-wrap.span2 { grid-column: span 2; }
+.field-label { font-size: 0.64rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #999; }
+.field-wrap input, .field-wrap select, .field-wrap textarea {
+  border: 1px solid var(--line); border-radius: 4px; padding: 7px 9px;
+  font-size: 0.84rem; color: var(--ink); background: var(--paper); outline: none; width: 100%;
+}
+.field-wrap input:focus, .field-wrap select:focus, .field-wrap textarea:focus { border-color: var(--teal-l); }
+.field-wrap textarea { resize: vertical; min-height: 68px; line-height: 1.6; }
+.field-wrap textarea.tall { min-height: 100px; }
+
+/* -- Areas table -- */
+.areas-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.areas-table th { background: var(--teal); color: white; padding: 7px 9px; text-align: left; font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+.areas-table td { padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.areas-table tr:nth-child(even) td { background: var(--paper); }
+.areas-table select, .areas-table input[type=text] { border: 1px solid var(--line); border-radius: 3px; padding: 4px 6px; font-size: 0.79rem; font-family: inherit; width: 100%; background: white; outline: none; margin-bottom: 3px; }
+.areas-table textarea { border: 1px solid var(--line); border-radius: 3px; padding: 4px 6px; font-size: 0.79rem; font-family: inherit; width: 100%; min-height: 54px; resize: vertical; outline: none; }
+.area-extra-label { font-size: 0.66rem; color: #999; margin: 3px 0 2px; }
+
+/* -- Footer bar -- */
+.footer-bar { padding: 12px 22px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; flex-shrink: 0; }
+
+/* -- File mode warning -- */
+.filemode-banner { display: none; background: #fff8e1; border-bottom: 2px solid var(--gold); padding: 9px 24px; font-size: 0.76rem; color: #5a4010; line-height: 1.7; flex-shrink: 0; }
+.filemode-banner strong { color: #3d2800; }
+.filemode-banner code { background: rgba(0,0,0,0.07); padding: 1px 6px; border-radius: 3px; font-family: monospace; user-select: all; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div>
+    <div class="header-title">Care Home Resident Review</div>
+    <div class="header-sub">AI-Assisted Clinical Documentation</div>
+  </div>
+  <div class="header-right">
+    <div class="toggle-wrap">
+      <span class="toggle-label active" id="lblInitial">Initial</span>
+      <div class="toggle-track" onclick="toggleForm()" id="toggleTrack">
+        <div class="toggle-thumb" id="toggleThumb"></div>
+      </div>
+      <span class="toggle-label" id="lblAnnual">Annual</span>
+    </div>
+  </div>
+</div>
+
+<!-- File mode banner (shown when opened as file://) -->
+<div class="filemode-banner" id="filemodeBanner">
+   <strong>Local file detected.</strong>
+  Speech recognition works here  allow microphone when prompted.
+  For AI form-filling, enter your API key below.
+  PDF printing works directly via Ctrl+P. 
+</div>
+
+<!-- API Key bar -->
+<div class="apikey-bar">
+  <label for="apiKeyInput">Anthropic API Key</label>
+  <input type="password" id="apiKeyInput" placeholder="sk-ant-..." autocomplete="off">
+  <button onclick="saveApiKey()">Save</button>
+  <span class="apikey-saved" id="apiKeySaved"> Key saved</span>
+  <span style="font-size:0.7rem;color:#888;margin-left:8px">
+    Get a key at <strong>console.anthropic.com</strong>  API Keys
+  </span>
+</div>
+
+<!-- Body -->
+<div class="body">
+
+  <!-- Left panel -->
+  <div class="panel-left">
+    <div class="panel-section-title">Step 1  Record Consultation</div>
+
+    <div class="info-box" id="recInfo">
+       Click the button to start recording. Speak clearly  transcript appears live.
+      Or type / paste notes directly below.
+    </div>
+    <div class="info-box warn" id="recWarn"></div>
+
+    <div class="rec-wrap">
+      <button class="rec-btn" id="recBtn" onclick="toggleRec()">
+        <div class="rec-dot"></div>
+      </button>
+      <div class="rec-status" id="recStatus">Click to start recording</div>
+      <div class="rec-timer" id="recTimer">0:00</div>
+    </div>
+
+    <div class="tx-label">Transcript (editable)</div>
+    <textarea id="transcript" placeholder="Live transcript appears here as you speak&#10;&#10;Or paste / type consultation notes directly."></textarea>
+
+    <div class="btn-row">
+      <button class="btn btn-outline" onclick="clearAll()">Clear</button>
+      <button class="btn btn-primary" id="analyseBtn" onclick="analyse()">Analyse & Fill Form </button>
+    </div>
+  </div>
+
+  <!-- Right panel -->
+  <div class="panel-right">
+
+    <div class="status-bar">
+      <div class="form-label" id="formLabel">Initial Resident Review  Annex B</div>
+      <div class="status-badge" id="badge">Awaiting transcript</div>
+    </div>
+
+    <div class="section-nav" id="sectionNav"></div>
+
+    <div class="form-area" id="formArea"></div>
+
+    <div class="footer-bar">
+      <button class="btn btn-dark" onclick="printPDF()" style="flex:0;padding:10px 22px;"> Download / Print PDF</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// -- State ------------------------------------------------
+let currentForm = 'initial';
+let currentSection = 0;
+let isRec = false;
+let recognition = null;
+let timerInt = null;
+let secs = 0;
+let finalTranscript = '';
+
+// -- Form Definitions -------------------------------------
+const SECTIONS_INITIAL = [
+  { label: 'Resident Details', fields: [
+    { id:'res_name',   label:'Resident Name' },
+    { id:'res_dob',    label:'D.O.B.' },
+    { id:'care_home',  label:'Nursing / Residential Home', span:2 },
+    { id:'lead_gp',    label:'Lead GP / Cluster Lead', span:2 },
+    { id:'date_assess',label:'Date of Assessment' },
+    { id:'assessor',   label:'Assessor Name' },
+  ]},
+  { label: 'Cognitive & Mood', fields: [
+    { id:'mmse_score', label:'MMSE Score (/30)' },
+    { id:'mmse_interp',label:'MMSE Interpretation', type:'select',
+      opts:['','24-30: No impairment','18-23: Mild impairment','0-17: Severe impairment'] },
+    { id:'gds_score',  label:'GDS / 6CIT Score' },
+    { id:'gds_interp', label:'Depression Result', type:'select',
+      opts:['','Not suggestive','Score >5  investigate','Other'] },
+    { id:'cognitive_notes', label:'Additional Notes', type:'textarea', span:2 },
+  ]},
+  { label: 'Medical & Systems', fields: [
+    { id:'current_problems', label:'Current Medical Problems', type:'textarea', span:2, tall:true },
+    { id:'sys_respiratory', label:'Respiratory', type:'textarea' },
+    { id:'sys_cardiac',     label:'Cardiac',     type:'textarea' },
+    { id:'sys_gi',          label:'Gastrointestinal', type:'textarea' },
+    { id:'sys_gu',          label:'GU',          type:'textarea' },
+    { id:'sys_neuro',       label:'Neurological', type:'textarea' },
+    { id:'sys_msk',         label:'MSK',          type:'textarea' },
+    { id:'sys_ent',         label:'ENT',          type:'textarea' },
+    { id:'sys_derm',        label:'Dermatology',  type:'textarea' },
+  ]},
+  { label: 'Examination', fields: [
+    { id:'heart_sounds', label:'Heart Sounds' },
+    { id:'murmur',       label:'Murmur' },
+    { id:'crt',          label:'CRT' },
+    { id:'jvp',          label:'JVP' },
+    { id:'pulse',        label:'Pulse' },
+    { id:'bp',           label:'Blood Pressure' },
+    { id:'exam_other',   label:'Other Findings', type:'textarea', span:2 },
+  ]},
+  { label: 'Specific Areas', type: 'areas' },
+  { label: 'Plan & Actions', fields: [
+    { id:'investigations',       label:'Investigations Recommended', type:'textarea', span:2, tall:true },
+    { id:'med_review',           label:'Medication Review', type:'select', opts:['','Y','N'] },
+    { id:'eol_discussed',        label:'End of Life Plan Discussed', type:'select', opts:['','Y','N'] },
+    { id:'recommended_actions',  label:'Recommended Actions', type:'textarea', span:2, tall:true },
+    { id:'further_actions',      label:'Further Actions & Person/s Responsible', type:'textarea', span:2, tall:true },
+  ]},
+];
+
+const CHANGES_SECTION = { label: 'Changes Since Last Review', fields: [
+  { id:'review_period',       label:'Period Since Last Review', span:2 },
+  { id:'changes_medical',     label:'Changes in Medical Problems',  type:'textarea', span:2, tall:true },
+  { id:'changes_function',    label:'Changes in Functional Status', type:'textarea', span:2 },
+  { id:'changes_cognitive',   label:'Changes in Cognition / Mood',  type:'textarea', span:2 },
+  { id:'hospital_admissions', label:'Hospital Admissions Since Last Review', type:'textarea', span:2 },
+]};
+
+const AREAS = [
+  { key:'mobility',  label:'Mobility',            opts:['','Unaided','Stick','Zimmer','Wheelchair','Bed bound'] },
+  { key:'falls',     label:'Falls Assessment',     opts:['','Risk assessment undertaken','Risk assessment required'] },
+  { key:'podiatry',  label:'Podiatry',             opts:['','Assessment undertaken','Assessment required'] },
+  { key:'oral',      label:'Oral Health',          opts:['','Assessment undertaken','Assessment required'],
+    extras:[{ label:'Care plan in place?', key:'oral_careplan', opts:['','Y','N'] }] },
+  { key:'pressure',  label:'Pressure Area Review', opts:['','Y','N'] },
+  { key:'diet',      label:'Diet',                 opts:['','Normal','Soft','Supplements','PEG'] },
+  { key:'hearing',   label:'Hearing',              opts:['','Normal','Hearing aid','Other'],
+    free:{ label:'Specify:', key:'hearing_specify' } },
+  { key:'eyesight',  label:'Eyesight',             opts:['','Normal','Glasses','Other'],
+    free:{ label:'Specify:', key:'eye_specify' },
+    extras:[{ label:'Care plan in place?', key:'eye_careplan', opts:['','Y','N'] }] },
+  { key:'osteo',     label:'Osteoporosis Risk',    opts:['','Y','N'],
+    extras:[
+      { label:'Recent falls:',    key:'osteo_falls',   opts:['','Y','N'] },
+      { label:'Ca & Vit D:',      key:'osteo_cavitd',  opts:['','Y','N'] },
+      { label:'Bisphosphonate:',  key:'osteo_bisphos', opts:['','Y','N'] },
+    ]},
+];
+
+function getSections() {
+  if (currentForm === 'annual') {
+    const s = [...SECTIONS_INITIAL];
+    s.splice(1, 0, CHANGES_SECTION);
+    return s;
+  }
+  return SECTIONS_INITIAL;
+}
+
+// -- Build UI ----------------------------------------------
+function buildNav() {
+  const nav = document.getElementById('sectionNav');
+  nav.innerHTML = '';
+  getSections().forEach((sec, i) => {
+    const tab = document.createElement('div');
+    tab.className = 'nav-tab' + (i === currentSection ? ' active' : '');
+    tab.textContent = sec.label;
+    tab.onclick = () => { currentSection = i; buildNav(); buildForm(); };
+    nav.appendChild(tab);
+  });
+}
+
+function buildForm() {
+  const area = document.getElementById('formArea');
+  const sec = getSections()[currentSection];
+  area.innerHTML = '';
+
+  const heading = document.createElement('div');
+  heading.className = 'section-heading';
+  heading.textContent = sec.label;
+  area.appendChild(heading);
+
+  if (sec.type === 'areas') {
+    area.appendChild(buildAreasTable());
+    return;
+  }
+
+  const grid = document.createElement('div');
+  grid.className = 'fields-grid';
+
+  (sec.fields || []).forEach(f => {
+    const wrap = document.createElement('div');
+    wrap.className = 'field-wrap' + (f.span === 2 ? ' span2' : '');
+
+    const lbl = document.createElement('label');
+    lbl.className = 'field-label';
+    lbl.textContent = f.label;
+    lbl.setAttribute('for', f.id);
+    wrap.appendChild(lbl);
+
+    let el;
+    if (f.type === 'select') {
+      el = document.createElement('select');
+      (f.opts || []).forEach(o => {
+        const opt = document.createElement('option');
+        opt.value = o; opt.textContent = o || 'Select';
+        el.appendChild(opt);
+      });
+    } else if (f.type === 'textarea') {
+      el = document.createElement('textarea');
+      if (f.tall) el.classList.add('tall');
+    } else {
+      el = document.createElement('input');
+      el.type = 'text';
+      el.placeholder = '';
+    }
+    el.id = f.id;
+    wrap.appendChild(el);
+    grid.appendChild(wrap);
+  });
+
+  area.appendChild(grid);
+}
+
+function buildAreasTable() {
+  const table = document.createElement('table');
+  table.className = 'areas-table';
+  table.innerHTML = '<thead><tr><th style="width:18%">Area</th><th style="width:36%">Status / Options</th><th>Action Required</th></tr></thead>';
+  const tbody = document.createElement('tbody');
+
+  AREAS.forEach(a => {
+    const tr = document.createElement('tr');
+
+    const tdLabel = document.createElement('td');
+    tdLabel.style.fontWeight = '600';
+    tdLabel.textContent = a.label;
+    tr.appendChild(tdLabel);
+
+    const tdStatus = document.createElement('td');
+    const sel = document.createElement('select');
+    sel.id = a.key;
+    a.opts.forEach(o => {
+      const opt = document.createElement('option');
+      opt.value = o; opt.textContent = o || 'Select';
+      sel.appendChild(opt);
+    });
+    tdStatus.appendChild(sel);
+
+    if (a.free) {
+      const lbl = document.createElement('div');
+      lbl.className = 'area-extra-label';
+      lbl.textContent = a.free.label;
+      const inp = document.createElement('input');
+      inp.type = 'text'; inp.id = a.free.key; inp.placeholder = '';
+      tdStatus.appendChild(lbl);
+      tdStatus.appendChild(inp);
+    }
+    (a.extras || []).forEach(ex => {
+      const lbl = document.createElement('div');
+      lbl.className = 'area-extra-label';
+      lbl.textContent = ex.label;
+      tdStatus.appendChild(lbl);
+      if (ex.opts) {
+        const s = document.createElement('select');
+        s.id = ex.key;
+        ex.opts.forEach(o => {
+          const opt = document.createElement('option');
+          opt.value = o; opt.textContent = o || 'Select';
+          s.appendChild(opt);
+        });
+        tdStatus.appendChild(s);
+      }
+    });
+    tr.appendChild(tdStatus);
+
+    const tdAction = document.createElement('td');
+    const ta = document.createElement('textarea');
+    ta.id = a.key + '_action';
+    ta.placeholder = 'Action required';
+    tdAction.appendChild(ta);
+    tr.appendChild(tdAction);
+    tbody.appendChild(tr);
+  });
+
+  table.appendChild(tbody);
+  return table;
+}
+
+function fillForm(data) {
+  Object.entries(data).forEach(([k, v]) => {
+    if (v === null || v === undefined) return;
+    const el = document.getElementById(k);
+    if (el) el.value = v;
+  });
+}
+
+function clearFormFields() {
+  document.querySelectorAll('.form-area input, .form-area select, .form-area textarea').forEach(el => {
+    el.value = el.tagName === 'SELECT' ? el.options[0]?.value || '' : '';
+  });
+}
+
+// -- Form toggle -------------------------------------------
+function toggleForm() {
+  currentForm = currentForm === 'initial' ? 'annual' : 'initial';
+  currentSection = 0;
+  document.getElementById('toggleThumb').className = 'toggle-thumb' + (currentForm === 'annual' ? ' on' : '');
+  document.getElementById('lblInitial').className = 'toggle-label' + (currentForm === 'initial' ? ' active' : '');
+  document.getElementById('lblAnnual').className = 'toggle-label' + (currentForm === 'annual' ? ' active' : '');
+  document.getElementById('formLabel').textContent = currentForm === 'initial'
+    ? 'Initial Resident Review  Annex B' : 'Annual Resident Review';
+  buildNav();
+  buildForm();
+}
+
+// -- Speech Recognition ------------------------------------
+function toggleRec() {
+  isRec ? stopRec() : startRec();
+}
+
+function startRec() {
+  const warn = document.getElementById('recWarn');
+  warn.style.display = 'none';
+
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    warn.textContent = ' Speech recognition requires Chrome or Edge.';
+    warn.style.display = 'block';
+    return;
+  }
+
+  finalTranscript = document.getElementById('transcript').value || '';
+  recognition = new SR();
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  recognition.lang = 'en-GB';
+
+  recognition.onresult = e => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const r = e.results[i];
+      if (!r[0]) continue;
+      const txt = r[0].transcript || '';
+      if (r.isFinal) finalTranscript += txt + ' ';
+      else interim += txt;
+    }
+    document.getElementById('transcript').value = finalTranscript + interim;
+  };
+
+  recognition.onerror = e => {
+    if (e.error === 'not-allowed') {
+      warn.textContent = ' Microphone access denied. Please allow microphone access in your browser settings.';
+      warn.style.display = 'block';
+      stopRec();
+    } else if (e.error === 'network') {
+      warn.textContent = ' Network error  speech recognition needs an internet connection.';
+      warn.style.display = 'block';
+      stopRec();
+    }
+  };
+  recognition.onend = () => { if (isRec) { try { recognition.start(); } catch(ex){} } };
+
+  try {
+    recognition.start();
+  } catch(ex) {
+    warn.textContent = ' Could not start recording: ' + ex.message;
+    warn.style.display = 'block';
+    return;
+  }
+
+  isRec = true;
+  secs = 0;
+  document.getElementById('recBtn').classList.add('recording');
+  document.getElementById('recStatus').textContent = 'Recording  click to stop';
+  document.getElementById('recStatus').classList.add('active');
+  document.getElementById('recTimer').classList.add('on');
+  timerInt = setInterval(() => {
+    secs++;
+    const m = Math.floor(secs / 60), s = secs % 60;
+    document.getElementById('recTimer').textContent = m + ':' + (s < 10 ? '0' : '') + s;
+  }, 1000);
+}
+
+function stopRec() {
+  isRec = false;
+  if (recognition) { try { recognition.stop(); } catch(ex){} recognition = null; }
+  clearInterval(timerInt);
+  document.getElementById('recBtn').classList.remove('recording');
+  document.getElementById('recStatus').textContent = 'Recording stopped  transcript ready';
+  document.getElementById('recStatus').classList.remove('active');
+}
+
+// -- API Key -----------------------------------------------
+function saveApiKey() {
+  const raw = document.getElementById('apiKeyInput').value;
+  const val = raw.replace(/[^ -~]/g, '').trim();
+  if (!val) { alert('Please enter an API key.'); return; }
+  if (!val.startsWith('sk-')) {
+    alert('Key should start with sk-\nGot: ' + val.slice(0,15) + '\n\nPlease copy it fresh from console.anthropic.com');
+    return;
+  }
+  document.getElementById('apiKeyInput').dataset.key = val;
+  try { localStorage.setItem('chr_apikey', val); } catch(e) {}
+  document.getElementById('apiKeyInput').value = '';
+  const saved = document.getElementById('apiKeySaved');
+  saved.textContent = 'Saved (' + val.length + ' chars, starts ' + val.slice(0,7) + ')';
+  saved.style.display = 'inline';
+  setTimeout(() => { saved.style.display = 'none'; }, 5000);
+}
+
+function getApiKey() {
+  const raw = document.getElementById('apiKeyInput').dataset.key
+    || (function(){ try { return localStorage.getItem('chr_apikey'); } catch(e){ return ''; } })()
+    || '';
+  // Strip any invisible/non-ASCII chars that would break the fetch header
+  return raw.replace(/[^ -~]/g, '').trim();
+}
+
+function loadApiKey() {
+  try {
+    const k = localStorage.getItem('chr_apikey');
+    if (k) {
+      document.getElementById('apiKeyInput').dataset.key = k;
+      document.getElementById('apiKeyInput').value = '';
+      document.getElementById('apiKeySaved').style.display = 'inline';
+    }
+  } catch(e) {}
+}
+
+// -- Analyse -----------------------------------------------
+async function analyse() {
+  const tx = document.getElementById('transcript').value.trim();
+  if (!tx) { alert('Please add a transcript first.'); return; }
+
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    alert('Please enter your Anthropic API key first.\n\nGet one at: console.anthropic.com  API Keys');
+    return;
+  }
+
+  const btn = document.getElementById('analyseBtn');
+  const badge = document.getElementById('badge');
+  btn.disabled = true; btn.textContent = 'Analysing';
+  badge.textContent = 'Processing'; badge.className = 'status-badge proc';
+
+  const isAnnual = currentForm === 'annual';
+  const systemPrompt = `You are a clinical documentation assistant for UK care home resident reviews.
+Extract structured data from the consultation transcript and return ONLY valid JSON with no preamble or markdown.
+Use null for any field not mentioned.
+
+Return exactly this JSON structure:
+{
+  "res_name":null,"res_dob":null,"care_home":null,"lead_gp":null,"date_assess":null,"assessor":null,
+  ${isAnnual ? '"review_period":null,"changes_medical":null,"changes_function":null,"changes_cognitive":null,"hospital_admissions":null,' : ''}
+  "mmse_score":null,"mmse_interp":null,"gds_score":null,"gds_interp":null,"cognitive_notes":null,
+  "current_problems":null,
+  "sys_respiratory":null,"sys_cardiac":null,"sys_gi":null,"sys_gu":null,
+  "sys_neuro":null,"sys_msk":null,"sys_ent":null,"sys_derm":null,
+  "heart_sounds":null,"murmur":null,"crt":null,"jvp":null,"pulse":null,"bp":null,"exam_other":null,
+  "mobility":null,"mobility_action":null,"falls":null,"falls_action":null,
+  "podiatry":null,"podiatry_action":null,"oral":null,"oral_action":null,"oral_careplan":null,
+  "pressure":null,"pressure_action":null,"diet":null,"diet_action":null,
+  "hearing":null,"hearing_action":null,"hearing_specify":null,
+  "eyesight":null,"eyesight_action":null,"eye_specify":null,"eye_careplan":null,
+  "osteo":null,"osteo_action":null,"osteo_falls":null,"osteo_cavitd":null,"osteo_bisphos":null,
+  "investigations":null,"med_review":null,"recommended_actions":null,"eol_discussed":null,"further_actions":null
+}`;
+
+  try {
+    // Log key info to console for debugging
+    console.log('Key length:', apiKey.length, 'starts with:', apiKey.slice(0,6), 'all ASCII:', /^[ -~]+$/.test(apiKey));
+    if (apiKey.length < 20) {
+      throw new Error('API key too short (' + apiKey.length + ' chars). Please re-paste your key and click Save.');
+    }
+    if (!apiKey.startsWith('sk-')) {
+      throw new Error('API key should start with sk- but got: ' + apiKey.slice(0,10));
+    }
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 2000,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: 'Consultation transcript:\n\n' + tx }],
+      }),
+    });
+
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error.type + ': ' + data.error.message);
+
+    const text = (data.content || []).map(b => b.text || '').join('');
+    const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+
+    // Navigate to first section and fill all forms
+    currentSection = 0;
+    buildNav(); buildForm();
+    setTimeout(() => {
+      fillForm(parsed);
+      badge.textContent = ' Form filled'; badge.className = 'status-badge done';
+    }, 100);
+
+  } catch(e) {
+    badge.textContent = 'Error'; badge.className = 'status-badge err';
+    alert('Error: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Analyse & Fill Form ';
+  }
+}
+
+// -- Clear -------------------------------------------------
+function clearAll() {
+  if (isRec) stopRec();
+  finalTranscript = '';
+  document.getElementById('transcript').value = '';
+  document.getElementById('recTimer').classList.remove('on');
+  document.getElementById('recTimer').textContent = '0:00';
+  document.getElementById('recStatus').textContent = 'Click to start recording';
+  document.getElementById('recStatus').classList.remove('active');
+  document.getElementById('badge').textContent = 'Awaiting transcript';
+  document.getElementById('badge').className = 'status-badge';
+  clearFormFields();
+}
+
+// -- PDF ---------------------------------------------------
+function printPDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const M = 16, PW = 210, CW = PW - M * 2;
+  let y = M;
+  const g = id => { const el = document.getElementById(id); return (el ? el.value : '').trim() || ''; };
+  const chk = (n = 20) => { if (y + n > 284) { doc.addPage(); y = M; } };
+  const title = currentForm === 'annual' ? 'Annual Resident Review' : 'Initial Resident Review (Annex B)';
+
+  // Header bar
+  doc.setFillColor(28, 43, 58); doc.rect(0, 0, 210, 20, 'F');
+  doc.setTextColor(247, 244, 239); doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
+  doc.text(title, M, 13);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(138, 171, 151);
+  doc.text('Generated: ' + new Date().toLocaleString('en-GB'), PW - M, 13, { align: 'right' });
+  y = 26;
+
+  const secH = t => {
+    chk(12);
+    doc.setFillColor(42, 110, 110); doc.rect(M, y, CW, 7, 'F');
+    doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
+    doc.text(t.toUpperCase(), M + 3, y + 5);
+    y += 10; doc.setTextColor(28, 43, 58);
+  };
+
+  const oneF = (lbl, id) => {
+    const v = g(id);
+    const lines = doc.splitTextToSize(v, CW);
+    const need = lines.length * 5.5 + 10; chk(need);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(130, 130, 130);
+    doc.text(lbl.toUpperCase(), M, y + 4);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(28, 43, 58);
+    doc.text(lines, M, y + 9);
+    doc.setDrawColor(220, 215, 205);
+    doc.line(M, y + 9 + (lines.length - 1) * 5.5 + 2, M + CW, y + 9 + (lines.length - 1) * 5.5 + 2);
+    y += need;
+  };
+
+  const twoF = (l1, id1, l2, id2) => {
+    const hw = CW / 2 - 4;
+    const ln1 = doc.splitTextToSize(g(id1), hw);
+    const ln2 = doc.splitTextToSize(g(id2), hw);
+    const mL = Math.max(ln1.length, ln2.length);
+    const need = mL * 5.5 + 10; chk(need);
+    const c2 = M + CW / 2 + 4;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(130, 130, 130);
+    doc.text(l1.toUpperCase(), M, y + 4); doc.text(l2.toUpperCase(), c2, y + 4);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(28, 43, 58);
+    doc.text(ln1, M, y + 9); doc.text(ln2, c2, y + 9);
+    doc.setDrawColor(220, 215, 205);
+    doc.line(M, y + 9 + (mL - 1) * 5.5 + 2, M + CW, y + 9 + (mL - 1) * 5.5 + 2);
+    y += need;
+  };
+
+  secH('Resident Details');
+  twoF('Resident Name', 'res_name', 'D.O.B.', 'res_dob');
+  oneF('Nursing / Residential Home', 'care_home');
+  oneF('Lead GP / Cluster Lead', 'lead_gp');
+  twoF('Date of Assessment', 'date_assess', 'Assessor', 'assessor');
+  y += 4;
+
+  if (currentForm === 'annual') {
+    secH('Changes Since Last Review');
+    oneF('Period Since Last Review', 'review_period');
+    oneF('Changes in Medical Problems', 'changes_medical');
+    oneF('Changes in Functional Status', 'changes_function');
+    oneF('Changes in Cognition / Mood', 'changes_cognitive');
+    oneF('Hospital Admissions', 'hospital_admissions');
+    y += 4;
+  }
+
+  secH('Cognitive & Mood Assessment');
+  twoF('MMSE Score (/30)', 'mmse_score', 'MMSE Interpretation', 'mmse_interp');
+  twoF('GDS / 6CIT Score', 'gds_score', 'Depression Result', 'gds_interp');
+  oneF('Additional Notes', 'cognitive_notes');
+  y += 4;
+
+  secH('Current Medical Problems');
+  oneF('Current Medical Problems', 'current_problems');
+  y += 4;
+
+  secH('Systems Review');
+  twoF('Respiratory', 'sys_respiratory', 'Cardiac', 'sys_cardiac');
+  twoF('Gastrointestinal', 'sys_gi', 'GU', 'sys_gu');
+  twoF('Neurological', 'sys_neuro', 'MSK', 'sys_msk');
+  twoF('ENT', 'sys_ent', 'Dermatology', 'sys_derm');
+  y += 4;
+
+  secH('Examination Findings');
+  twoF('Heart Sounds', 'heart_sounds', 'Murmur', 'murmur');
+  twoF('CRT', 'crt', 'JVP', 'jvp');
+  twoF('Pulse', 'pulse', 'Blood Pressure', 'bp');
+  oneF('Other Findings', 'exam_other');
+  y += 4;
+
+  secH('Specific Additional Areas');
+  const cw = [44, 72, CW - 116];
+  ['Area', 'Status / Options', 'Action Required'].forEach((h, i) => {
+    const x = M + (i === 0 ? 0 : i === 1 ? 44 : 116);
+    doc.setFillColor(42, 110, 110); doc.rect(x, y, cw[i], 7, 'F');
+    doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(7);
+    doc.text(h, x + 2, y + 5);
+  });
+  y += 8; doc.setTextColor(28, 43, 58);
+
+  AREAS.forEach((a, ri) => {
+    const l1 = doc.splitTextToSize(a.label, cw[0] - 3);
+    const l2 = doc.splitTextToSize(g(a.key), cw[1] - 3);
+    const l3 = doc.splitTextToSize(g(a.key + '_action'), cw[2] - 3);
+    const mL = Math.max(l1.length, l2.length, l3.length);
+    const rh = mL * 5 + 6; chk(rh + 2);
+    if (ri % 2 === 0) { doc.setFillColor(247, 244, 239); doc.rect(M, y, CW, rh, 'F'); }
+    doc.setDrawColor(220, 215, 205); doc.rect(M, y, CW, rh, 'S');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.text(l1, M + 2, y + 5);
+    doc.setFont('helvetica', 'normal'); doc.text(l2, M + 46, y + 5); doc.text(l3, M + 118, y + 5);
+    y += rh;
+  });
+  y += 4;
+
+  secH('Investigations, Plan & Actions');
+  oneF('Investigations Recommended', 'investigations');
+  twoF('Medication Review (Y/N)', 'med_review', 'End of Life Plan Discussed (Y/N)', 'eol_discussed');
+  oneF('Recommended Actions', 'recommended_actions');
+  oneF('Further Actions & Persons Responsible', 'further_actions');
+
+  // Page footers
+  const pc = doc.internal.getNumberOfPages();
+  for (let i = 1; i <= pc; i++) {
+    doc.setPage(i);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(180, 180, 180);
+    doc.text('Page ' + i + ' of ' + pc + '    ' + title + '    CONFIDENTIAL', PW / 2, 293, { align: 'center' });
+  }
+
+  const name = (document.getElementById('res_name')?.value || 'resident').replace(/[^a-z0-9]/gi, '-');
+  doc.save(currentForm + '-review-' + name + '-' + new Date().toISOString().slice(0, 10) + '.pdf');
+}
+
+// -- Init --------------------------------------------------
+buildNav();
+buildForm();
+loadApiKey();
+
+// Show banner if opened as local file
+if (window.location.protocol === 'file:') {
+  document.getElementById('filemodeBanner').style.display = 'block';
+}
+</script>
+</body>
+</html>
