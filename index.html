@@ -688,7 +688,7 @@ JSON structure:
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 2000,
+        max_tokens: 4000,
         system: systemPrompt,
         messages: [{ role: 'user', content: 'Consultation transcript:\n\n' + tx }],
       }),
@@ -698,14 +698,33 @@ JSON structure:
     if (data.error) throw new Error(data.error.type + ': ' + data.error.message);
 
     const text = (data.content || []).map(b => b.text || '').join('');
-    const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+    console.log('API response length:', text.length, 'stop_reason:', data.stop_reason);
+    console.log('Raw response:', text.slice(0, 500));
+
+    let parsed;
+    const clean = text.replace(/```json|```/g, '').trim();
+    try {
+      parsed = JSON.parse(clean);
+    } catch(e) {
+      // Attempt to recover truncated JSON
+      const lastComma = clean.lastIndexOf(',"');
+      const truncated = clean.slice(0, lastComma) + '}';
+      try {
+        parsed = JSON.parse(truncated);
+      } catch(e2) {
+        throw new Error('JSON parse failed. Stop reason: ' + data.stop_reason + '. Preview: ' + text.slice(0, 300));
+      }
+    }
+
+    const filledCount = Object.values(parsed).filter(v => v !== null).length;
+    console.log('Fields filled:', filledCount);
 
     // Navigate to first section and fill all forms
     currentSection = 0;
     buildNav(); buildForm();
     setTimeout(() => {
       fillForm(parsed);
-      badge.textContent = ' Form filled'; badge.className = 'status-badge done';
+      badge.textContent = ' Filled ' + filledCount + ' fields'; badge.className = 'status-badge done';
     }, 100);
 
   } catch(e) {
